@@ -13,13 +13,24 @@ export default function Navbar() {
   return (
     <nav className="bg-blue-600 text-white p-4 flex justify-between items-center">
       <Link to="/" className="text-xl font-bold">AI CRM</Link>
-      <div className="space-x-4 flex items-center">
+      <div className="space-x-4 flex items-center text-sm">
         {user ? (
           <>
-            <Link to="/" className="hover:underline">Dashboard</Link>
-            <Link to="/customers" className="hover:underline">Customers</Link>
-            <Link to="/leads" className="hover:underline">Leads</Link>
-            <Link to="/tasks" className="hover:underline">Tasks</Link>
+            {/* Admin & Agent see full CRM */}
+            {(user.role === "Admin" || user.role === "Agent") && (
+              <>
+                <Link to="/" className="hover:underline">Dashboard</Link>
+                <Link to="/customers" className="hover:underline">Customers</Link>
+                <Link to="/leads" className="hover:underline">Leads</Link>
+                <Link to="/tasks" className="hover:underline">Tasks</Link>
+                <Link to="/complaints" className="hover:underline">Complaints</Link>
+              </>
+            )}
+            {/* Customer sees only their portal */}
+            {user.role === "Customer" && (
+              <Link to="/portal" className="hover:underline">My Portal</Link>
+            )}
+            <span className="bg-white text-blue-600 px-2 py-0.5 rounded text-xs font-bold">{user.role}</span>
             <Link to="/profile" className="hover:underline">{user.name}</Link>
             <button onClick={logout} className="bg-white text-blue-600 px-3 py-1 rounded text-sm font-semibold">
               Logout

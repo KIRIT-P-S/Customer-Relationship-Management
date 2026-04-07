@@ -8,6 +8,8 @@ import Customers from "./pages/Customers";
 import Leads from "./pages/Leads";
 import Tasks from "./pages/Tasks";
 import Profile from "./pages/Profile";
+import Complaints from "./pages/Complaints";
+import CustomerPortal from "./pages/CustomerPortal";
 
 export default function App() {
   return (
@@ -22,6 +24,8 @@ export default function App() {
           <Route path="/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
           <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/complaints" element={<ProtectedRoute><Complaints /></ProtectedRoute>} />
+          <Route path="/portal" element={<ProtectedRoute><CustomerPortal /></ProtectedRoute>} />
         </Routes>
       </div>
     </Router>

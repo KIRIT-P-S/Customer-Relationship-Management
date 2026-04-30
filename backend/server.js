@@ -15,6 +15,10 @@ app.use("/api/ai", require("./routes/ai"));
 app.use("/api/complaints", require("./routes/complaints"));
 app.use("/api/notes", require("./routes/notes"));
 app.use("/api/analytics", require("./routes/analytics"));
+app.use("/api/deals", require("./routes/deals"));
+app.use("/api/reminders", require("./routes/reminders"));
+app.use("/api/admin", require("./routes/admin"));
+app.use("/api/email", require("./routes/email"));
 
 mongoose
   .connect(process.env.MONGO_URI)

@@ -13,6 +13,8 @@ app.use("/api/leads", require("./routes/leads"));
 app.use("/api/tasks", require("./routes/tasks"));
 app.use("/api/ai", require("./routes/ai"));
 app.use("/api/complaints", require("./routes/complaints"));
+app.use("/api/notes", require("./routes/notes"));
+app.use("/api/analytics", require("./routes/analytics"));
 
 mongoose
   .connect(process.env.MONGO_URI)

@@ -40,66 +40,86 @@ router.post("/chat", auth, async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ message: "Message required" });
 
+    // Check if Gemini API key exists
+    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "your_gemini_key_here") {
+      return res.json({ 
+        reply: "AI chat is not configured. Please add your GEMINI_API_KEY to environment variables.", 
+        action: "none" 
+      });
+    }
+
     const [customers, leads, tasks] = await Promise.all([
       Customer.find({ user: req.user._id }),
       Lead.find({ user: req.user._id }),
       Task.find({ user: req.user._id }),
     ]);
 
-    const prompt = `
-You are an AI assistant for a CRM system. You can answer questions AND perform actions.
-
-CRM Data:
-- Customers: ${customers.length} (Active:${customers.filter(c=>c.status==="Active").length}, AtRisk:${customers.filter(c=>c.status==="At Risk").length}, Inactive:${customers.filter(c=>c.status==="Inactive").length})
-- Leads: ${leads.length} (New:${leads.filter(l=>l.status==="New").length}, Qualified:${leads.filter(l=>l.status==="Qualified").length}, Lost:${leads.filter(l=>l.status==="Lost").length})
-- Tasks: ${tasks.length} (Pending:${tasks.filter(t=>t.status==="Pending").length}, InProgress:${tasks.filter(t=>t.status==="In Progress").length}, Done:${tasks.filter(t=>t.status==="Done").length})
-
-Customer names: ${customers.map(c=>c.name).join(", ") || "none"}
-Lead names: ${leads.map(l=>l.name).join(", ") || "none"}
-Task titles: ${tasks.map(t=>t.title).join(", ") || "none"}
-
-If the user wants to CREATE/ADD/UPDATE/DELETE something, respond with a JSON action block like:
-{"action":"create_task","data":{"title":"...","description":"...","status":"Pending","dueDate":"YYYY-MM-DD"}}
-{"action":"create_customer","data":{"name":"...","email":"...","phone":"...","company":"...","status":"Active"}}
-{"action":"create_lead","data":{"name":"...","email":"...","phone":"...","source":"Manual","status":"New"}}
-{"action":"update_task","data":{"title":"existing task title","status":"Done"}}
-{"action":"none","reply":"your normal text reply"}
-
-Always respond with valid JSON only. No markdown. No explanation outside JSON.
-User message: "${message}"`;
-
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(prompt);
-    let raw = result.response.text().trim().replace(/```json|```/g, "").trim();
-
-    let parsed;
-    try { parsed = JSON.parse(raw); } catch { parsed = { action: "none", reply: raw }; }
-
-    // Execute the action
-    if (parsed.action === "create_task") {
-      const task = await Task.create({ ...parsed.data, user: req.user._id });
-      return res.json({ reply: `✅ Task "${task.title}" created successfully!`, action: "create_task", result: task });
-    }
-    if (parsed.action === "create_customer") {
-      const customer = await Customer.create({ ...parsed.data, user: req.user._id });
-      return res.json({ reply: `✅ Customer "${customer.name}" added successfully!`, action: "create_customer", result: customer });
-    }
-    if (parsed.action === "create_lead") {
-      const lead = await Lead.create({ ...parsed.data, user: req.user._id });
-      return res.json({ reply: `✅ Lead "${lead.name}" added successfully!`, action: "create_lead", result: lead });
-    }
-    if (parsed.action === "update_task") {
-      const task = await Task.findOneAndUpdate(
-        { user: req.user._id, title: new RegExp(parsed.data.title, "i") },
-        { status: parsed.data.status },
-        { new: true }
-      );
-      return res.json({ reply: task ? `✅ Task "${task.title}" updated to ${task.status}!` : "❌ Task not found.", action: "update_task" });
+    // Simple action detection without AI for basic commands
+    const lowerMsg = message.toLowerCase();
+    
+    // Create task
+    if (lowerMsg.includes("create task") || lowerMsg.includes("add task")) {
+      const titleMatch = message.match(/task[:\s]+(.+?)(?:\s+due|\s+by|\s*$)/i);
+      const title = titleMatch ? titleMatch[1].trim() : message.replace(/create task|add task/i, "").trim();
+      if (title) {
+        const task = await Task.create({ title, user: req.user._id });
+        return res.json({ reply: `✅ Task "${task.title}" created!`, action: "create_task", result: task });
+      }
     }
 
-    res.json({ reply: parsed.reply || raw, action: "none" });
+    // Create customer
+    if (lowerMsg.includes("create customer") || lowerMsg.includes("add customer")) {
+      const nameMatch = message.match(/customer[:\s]+(.+?)(?:\s+email|\s+at|\s*$)/i);
+      const emailMatch = message.match(/email[:\s]+([^\s]+)/i);
+      const name = nameMatch ? nameMatch[1].trim() : "New Customer";
+      const email = emailMatch ? emailMatch[1] : `${name.toLowerCase().replace(/\s+/g, "")}@example.com`;
+      const customer = await Customer.create({ name, email, user: req.user._id });
+      return res.json({ reply: `✅ Customer "${customer.name}" added!`, action: "create_customer", result: customer });
+    }
+
+    // Create lead
+    if (lowerMsg.includes("create lead") || lowerMsg.includes("add lead")) {
+      const nameMatch = message.match(/lead[:\s]+(.+?)(?:\s+email|\s+at|\s*$)/i);
+      const emailMatch = message.match(/email[:\s]+([^\s]+)/i);
+      const name = nameMatch ? nameMatch[1].trim() : "New Lead";
+      const email = emailMatch ? emailMatch[1] : `${name.toLowerCase().replace(/\s+/g, "")}@example.com`;
+      const lead = await Lead.create({ name, email, user: req.user._id });
+      return res.json({ reply: `✅ Lead "${lead.name}" added!`, action: "create_lead", result: lead });
+    }
+
+    // Try Gemini AI for complex queries
+    try {
+      const context = `
+You are a CRM assistant. Current data:
+- Customers: ${customers.length} (${customers.map(c=>c.name).join(", ") || "none"})
+- Leads: ${leads.length} (${leads.map(l=>l.name).join(", ") || "none"}) 
+- Tasks: ${tasks.length} (${tasks.map(t=>t.title).join(", ") || "none"})
+
+Answer this question: ${message}`;
+
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const result = await model.generateContent(context);
+      const reply = result.response.text();
+      return res.json({ reply, action: "none" });
+    } catch (aiError) {
+      console.error("Gemini AI Error:", aiError.message);
+      
+      // Fallback response
+      const stats = `You have ${customers.length} customers, ${leads.length} leads, and ${tasks.length} tasks. `;
+      let fallbackReply = stats;
+      
+      if (lowerMsg.includes("how many") || lowerMsg.includes("count")) {
+        fallbackReply += "Use commands like 'create task: follow up with John' or 'add customer: Jane Doe' to manage your CRM.";
+      } else {
+        fallbackReply += "I can help you create tasks, customers, and leads. Try: 'create task: call client tomorrow'";
+      }
+      
+      return res.json({ reply: fallbackReply, action: "none" });
+    }
+
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Chat Error:", err.message);
+    res.status(500).json({ message: "Chat service temporarily unavailable. Try simple commands like 'create task: your task name'" });
   }
 });
 
